@@ -1,372 +1,153 @@
 # Aster & Row Support Agent
 
-A reliable RAG-based customer support agent built for the Aster & Row take-home assignment.
+A small, reliability-focused RAG customer-support agent for the Aster & Row take-home assignment.
 
-## What it does
+It answers policy questions from the supplied knowledge base, looks up orders through a dedicated tool, carries relevant context between turns, and abstains when evidence is missing or conflicting.
 
-The agent combines:
+## Quick start
 
-- Retrieval-Augmented Generation over the supplied Markdown knowledge base
-- Authoritative-source and supersession handling
-- Applicability-aware policy resolution
-- Order lookup through a dedicated tool
-- Multi-turn conversation context
-- Structured LLM intent extraction
-- Response guardrails
-- Human-handoff evaluation
-- Deterministic behavior-level evaluation
-- CLI interface
-- Debug/observability output
+Requirements: Python 3.11+, a Groq API key, and internet access on the first embedding-model download.
 
-The implementation deliberately keeps company-specific facts in the supplied knowledge base rather than hardcoding policy answers into application logic.
-
----
-
-## Setup
-
-### Requirements
-
-- Python 3.11+
-- A Groq API key
-- Internet access for the embedding model on first run
-
-### Install
-
-```
+```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+cp .env.example .env
+```
 
-On Windows Git Bash:
+On Windows Git Bash, use `source .venv/Scripts/activate`.
 
-source .venv/Scripts/activate
+Set these values in `.env`:
 
-
-Copy: cp .env.example .env
-
-Set:
-
+```text
 GROQ_API_KEY=your_key_here
 GROQ_MODEL=openai/gpt-oss-120b
+```
 
-Do not commit .env or any credentials.
-refusal of requests for internal information
 
-Type exit or quit to leave.
-Intent inspection
-python -m scripts.test_intent
-Evaluation
-python -m evaluation.runner
-
-User
- │
- ▼
-Session Context
- │
- ▼
-Intent Extraction (LLM)
- │
- ▼
-Deterministic Router
- │
- ├───────────────┐
- ▼               ▼
-RAG Retrieval    Order Tool
- │               │
- ▼               ▼
-Policy Resolver  Sanitized Order Result
- │               │
- └───────┬───────┘
-         ▼
-    Evidence Bundle
-         │
-         ▼
- Response Generator
-         │
-         ▼
- Response Guardrail
-         │
-         ▼
- Human Handoff Evaluation
-         │
-         ▼
- Customer Response
-Retrieval
-
-Markdown documents are loaded, chunked, embedded, and indexed.
-
-Retrieval returns passages with:
-
-document ID
-filename
-heading
-text
-similarity score
-
-Policy resolution then considers:
-
-document authority
-active/superseded status
-purchase-date applicability
-membership applicability
-final-sale applicability
-supersession
-genuine conflicts
-
-The LLM does not receive the entire knowledge base.
-
-Orders
-
-data/orders.json is accessed through OrderLookupTool.
-
-The model does not receive the complete order database. Only the sanitized result of an actual lookup is provided to the response-generation layer.
-
-Internal fields such as:
-
-customer email
-address
-internal notes
-risk score
-
-are never exposed to the customer.
-
-Multi-turn context
-
-SessionContext retains only relevant structured context such as:
-
-previous message
-resolved query
-active topic
-order ID
-
-This allows follow-ups such as:
-
-Do you ship internationally?
-
-followed by:
-
-What about Canada?
-
-to resolve against the previous topic.
-
-Technology choices
-Component	Choice
-Language	Python
-LLM provider	Groq
-LLM	openai/gpt-oss-120b
-Embeddings	all-MiniLM-L6-v2
-Retrieval	NumPy cosine-similarity index
-Knowledge base	Markdown
-Order data	JSON
-Structured validation	Pydantic
-Tests	pytest
-Interface	CLI
-
-The system intentionally avoids a production vector database because the assignment explicitly prioritizes a small, reliable implementation over infrastructure.
-
-Evaluation
-Baseline
-
-Initial baseline before reliability fixes:
-
-[INSERT BASELINE SCORE]
-
-The baseline exposed failures involving:
-
-policy precedence
-order lookup routing
-multi-turn context
-human handoff
-structured output
-prompt-injection handling
-Current result
-
-Latest evaluation:
-
-[INSERT FINAL SCORE AFTER ALL FIXES]
-
-Category breakdown:
-
-Category	Result
-Retrieval	[x/x]
-Multi-source grounding	[x/x]
-Conversation	[x/x]
-Groundedness	[x/x]
-Tool use	[x/x]
-Tool reliability	[x/x]
-Privacy	[x/x]
-Prompt security	[x/x]
-Abstention	[x/x]
-Source conflict	[x/x]
-
-Run:
-
-python -m evaluation.runner
-
-to reproduce the evaluation.
-
-Bug diary
-1. Order lookup was skipped for Route.BOTH
-Reproduction
-
-A request requiring both policy retrieval and order lookup produced retrieved evidence but no order result.
-
-Root cause
-
-The executor only performed the order lookup for:
-
-route == Route.ORDER_TOOL
-
-It did not execute the order tool when the route was Route.BOTH.
-
-Fix
-
-The executor now executes the order lookup whenever the intent requires it, including combined routes.
-
-Regression test
-tests/agent/test_executor_integration.py
-
-covers the combined retrieval + order path.
-
-2. Groq rejected structured response schemas
-Reproduction
-
-The live agent failed with:
-
-invalid JSON schema for response_format
-
-Groq required every object property to appear in required.
-
-Root cause
-
-Optional Pydantic fields were represented as optional properties rather than required nullable properties.
-
-Fix
-
-Nullable structured-output fields are represented as required fields whose value may be null.
-
-Regression test
-
-Intent and structured-response tests exercise the generated Pydantic schema.
-
-3. Retrieval could surface internal migration content
-Reproduction
-
-A user referenced an internal migration note claiming that every customer receives 60 days.
-
-The retriever returned:
-
-14-internal-content-migration-notes.md
-
-and the legacy 45-day policy.
-
-Root cause
-
-Semantic retrieval alone does not understand document authority.
-
-Fix
-
-Policy resolution filters retrieved candidates using document metadata before allowing them to support a customer-facing answer.
-
-Internal migration notes are treated as untrusted data rather than instructions.
-
-Regression test
-
-The visible prompt-injection evaluation case verifies that the migration note cannot override the authoritative current policy.
-
-4. Handoff rules were incomplete
-Reproduction
-
-Requests for unsupported actions such as replacement, warranty approval, and address changes were not always marked for human assistance.
-
-Root cause
-
-The handoff evaluator did not cover every unsupported customer action specified by the escalation policy.
-
-Fix
-
-The evaluator now recognizes unsupported actions and insufficient retrieval evidence as human-handoff conditions.
-
-Regression test
-tests/agent/test_handoff.py
-
-contains dedicated cases for these behaviors.
-
-Security and safety behavior
-
-Retrieved documents and tool results are treated as data, not instructions.
-
-The agent:
-
-does not reveal hidden prompts
-does not reveal internal notes
-does not reveal customer addresses or email addresses
-does not reveal risk scores
-does not invent order information
-does not invent delivery dates
-does not silently resolve genuine authoritative source conflicts
-recommends human assistance when the supplied information is insufficient
-does not claim that an unsupported action was completed
-Known limitations
-
-This is a take-home implementation rather than a production support platform.
-
-Known limitations include:
-
-No authentication or identity verification
-No persistent conversation database
-In-memory session context
-Local NumPy retrieval index
-No production vector database
-No streaming response UI
-No real ticketing/handoff integration
-Evaluation currently focuses on deterministic behavior-level cases
-latency and cost instrumentation
-real support-ticket integration
-stronger automated adversarial testing
-document versioning and approval workflows
-end-to-end identity and authorization controls
-AI coding tools
-
-The final implementation keeps policy facts in retrieved documents and uses structured metadata such as membership tier only to determine which retrieved policy applies.
-
-Demo
-Evaluation suite
-
-TODO: embed final GIF/video here
-
-Example:
-│   ├── agent/
-│   ├── ingestion/
-│   ├── llm/
-│   ├── orchestration/
-│   ├── retrieval/
-│   └── tools/
-├── data/
-│   └── orders.json
-├── knowledge-base/
-├── evaluation/
-├── scripts/
-
-The goal of this implementation is not to make the model appear confident.
-
-The goal is to make the system:
-
-retrieve → verify → reason about applicability → act only when supported → abstain when necessary.
-
-Reliability is preferred over a broad but weak demo.
-
-
-### Important
-
-Don't fill in the bracketed evaluation numbers yet. Our **final score isn't final**.
-
-Also, the assignment explicitly asks for a demo GIF/video and the bug diary, so those are the two README items we should finish **after the last evaluation fixes**. :contentReference[oaicite:1]{index=1}
-
-For the GitHub update itself, once you're back in your project terminal, run:
+Run the interactive CLI:
 
 ```bash
-git status
-git remote -v
+python -m scripts.chat
+```
 
-Paste that output here. Then I'll give you the exact add → commit → push commands without risking overwriting anything.
+Inspect intent extraction with `python -m scripts.test_intent` and run the evaluation with `python -m evaluation.runner`.
+
+## How it works
+
+```text
+User -> SessionContext -> Intent extraction -> Deterministic router
+                                      |                 |
+                                      v                 v
+                               RAG + policy       Sanitized order lookup
+                                      \                 /
+                                       -> Evidence -> Response guardrails
+```
+
+### Retrieval and policy resolution
+
+Markdown files are loaded, chunked, embedded, and searched with a local NumPy cosine-similarity index. Results retain document IDs, filenames, headings, text, and scores.
+
+The policy resolver checks authority, active or superseded status, purchase date, membership, final-sale rules, and conflicts. Internal migration notes are untrusted data and cannot override customer-facing policy. The model receives relevant passages only, never the full knowledge base.
+
+### Order safety
+
+`data/orders.json` is accessed through a dedicated lookup tool. Only sanitized lookup results reach response generation. Email addresses, physical addresses, internal notes, risk scores, stale delivery fields, and invented status or dates are excluded.
+
+### Conversation and observability
+
+`SessionContext` retains relevant state such as the previous message, active topic, order ID, and membership tier. Debug output covers messages, context, retrieved evidence, tool results, fallbacks, handoffs, and final responses without logging secrets.
+
+## Technology
+
+| Area | Choice |
+| --- | --- |
+| Language and validation | Python, Pydantic |
+| LLM | Groq `openai/gpt-oss-120b` |
+| Embeddings | `all-MiniLM-L6-v2` |
+| Retrieval | NumPy cosine similarity |
+| Storage | Markdown knowledge base and JSON order data |
+| Interface | CLI |
+| Tests | pytest |
+
+The intentionally small local index avoids production infrastructure outside this assignment's scope.
+
+## Evaluation
+
+The runner reports individual cases and category totals using deterministic assertions for claims, forbidden content, sources, tool calls, tool arguments, privacy, and handoff behavior. Cases are stored in `evaluation/visible-cases.json`; additional cases are in `evaluation/original-cases.json`.
+
+The latest local visible-case run was **10/15**. This is provisional, not the final submission score. Five cases still require fixes, so the final score remains pending.
+
+| Category | Result |
+| --- | --- |
+| Retrieval | Pending |
+| Multi-source grounding | Pending |
+| Conversation | Pending |
+| Groundedness | Pending |
+| Tool use | Pending |
+| Tool reliability | Pending |
+| Privacy | Pending |
+| Prompt security | Pending |
+| Abstention | Pending |
+| Source conflict | Pending |
+
+**Baseline:** Pending  
+**Final score:** Pending
+
+## Bug diary
+
+### Combined policy and order requests
+
+The executor initially skipped the order tool for `Route.BOTH`. It now performs a lookup whenever the validated intent requires one. Regression coverage: `tests/agent/test_executor_integration.py`.
+
+### Groq structured output
+
+Groq strict schemas require every property to be listed in `required` and every object to set `additionalProperties` to `false`. `IntentSchema` now uses a forbidden-extra configuration and required nullable fields. Regression coverage: `tests/orchestration/test_router.py`.
+
+### Internal migration content
+
+Semantic retrieval could surface an internal migration note and legacy policy. Policy resolution now filters candidates by authority and status before customer-facing generation. Regression coverage: the prompt-injection evaluation case.
+
+### Incomplete handoff rules
+
+Unsupported actions and insufficient evidence were not always escalated. The handoff evaluator now covers those paths. Regression coverage: `tests/agent/test_handoff.py`.
+
+## Safety guarantees
+
+- Refuses requests for hidden prompts, secrets, and internal-only data.
+- Never exposes private order fields.
+- Never invents order status, tracking, or delivery dates.
+- Surfaces genuine authoritative-source conflicts.
+- Recommends human help when information is insufficient or an action is unsupported.
+- Never claims an unsupported refund, cancellation, replacement, or address change was completed.
+
+## Limitations
+
+This is a take-home implementation. It has no authentication, persistent sessions, production vector database, streaming UI, ticketing integration, or production monitoring. The embedding model downloads from Hugging Face on first use, and the CLI is intentionally minimal.
+
+Before production I would add authenticated persistent sessions, production retrieval infrastructure, monitoring, cost and latency instrumentation, ticket integration, stronger adversarial testing, document approval workflows, and end-to-end authorization controls.
+
+## AI coding tools
+
+AI assistance was used for debugging tests, reviewing control flow, finding missing integration paths, and generating implementation suggestions. One incomplete suggestion was to hardcode a retrieved policy value in application logic. That was rejected so company-specific facts remain grounded in the supplied knowledge base.
+
+## Demo status
+
+Yet to do
+
+## Repository layout
+
+```text
+app/             Application source
+data/            Orders and data dictionary
+evaluation/      Visible and original behavior cases
+knowledge-base/  Policy and product documents
+scripts/         CLI and inspection commands
+tests/           Unit and integration tests
+```
+
+## Design principle
+
+```text
+retrieve -> verify -> resolve applicability -> act only when supported -> abstain when necessary
+```
