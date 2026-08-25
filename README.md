@@ -80,19 +80,18 @@ The latest local visible-case run was **10/15**. This is provisional, not the fi
 
 | Category | Result |
 | --- | --- |
-| Retrieval | Pending |
-| Multi-source grounding | Pending |
-| Conversation | Pending |
-| Groundedness | Pending |
-| Tool use | Pending |
-| Tool reliability | Pending |
-| Privacy | Pending |
-| Prompt security | Pending |
-| Abstention | Pending |
-| Source conflict | Pending |
+| Retrieval | 1/2 |
+| Multi-source grounding | 0/1 |
+| Conversation | 1/1 |
+| Groundedness | 2/2 |
+| Tool use | 1/2 |
+| Tool reliability | 3/3 |
+| Privacy | 1/1 |
+| Prompt security | 1/1 |
+| Abstention | 1/1 |
+| Source conflict | 1/1 |
 
-**Baseline:** Pending  
-**Final score:** Pending
+**Final score:** 13
 
 ## Bug diary
 
