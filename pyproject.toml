@@ -1,0 +1,20 @@
+[project]
+name = "aster-row-agent"
+version = "0.1.0"
+description = "Reliable RAG support agent for Aster & Row"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "openai>=1.0",
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
