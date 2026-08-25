@@ -152,6 +152,7 @@ A short walkthrough demonstrating:
 - Appropriate refusal / human handoff
 - Evaluation suite
 
+[▶️ Watch the minute demo](https://github.com/user-attachments/assets/56ce21b2-056d-4667-8918-13c63530fc4e)
 
 ## Repository layout
 
