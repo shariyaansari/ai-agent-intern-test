@@ -91,7 +91,7 @@ The latest local visible-case run was **10/15**. This is provisional, not the fi
 | Abstention | 1/1 |
 | Source conflict | 1/1 |
 
-**Final score:** 13
+**Final score:** 12
 
 ## Bug diary
 
