@@ -1,394 +1,239 @@
-# Aster & Row Support Agent
+# AI Agent Intern Take-Home: Build a Reliable RAG Support Agent
 
-A reliable RAG-based customer support agent built for the Aster & Row take-home assignment.
+## The assignment
 
-## What it does
+Aster & Row is a fictional ecommerce company that sells bags, drinkware, and travel accessories. The company wants to launch an AI support agent using the documents and mock order data in this repository.
 
-The agent combines:
+This repository intentionally contains **only content and data**. There is no starter application and no prescribed stack. Build the smallest reliable system you would be comfortable demonstrating to a customer.
 
-- Retrieval-Augmented Generation over the supplied Markdown knowledge base
-- Authoritative-source and supersession handling
-- Applicability-aware policy resolution
-- Order lookup through a dedicated tool
-- Multi-turn conversation context
-- Structured LLM intent extraction
-- Response guardrails
-- Human-handoff evaluation
-- Deterministic behavior-level evaluation
-- CLI interface
-- Debug/observability output
+## Timebox
 
-The implementation deliberately keeps company-specific facts in the supplied knowledge base rather than hardcoding policy answers into application logic.
+Please spend **6–8 hours** on the assignment. Do not exceed eight hours.
 
----
+A smaller, well-tested system is better than a broad system that works only in a demo. It is acceptable to leave something incomplete if the limitation is clearly documented.
 
-## Setup
+## Submission
 
-### Requirements
+Submit **one GitHub repository link**. Nothing else is required.
 
-- Python 3.11+
-- A Groq API key
-- Internet access for the embedding model on first run
+Your repository must contain:
 
-### Install
+- Your application source code.
+- Your tests and evaluation suite.
+- Clear setup and run instructions.
+- Evaluation results and known limitations in the README.
+- A short GIF or video embedded in the README showing the agent working.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-On Windows Git Bash:
-
-```bash
-source .venv/Scripts/activate
-```
-
-### Configure
-
-Copy the example env file:
-
-```bash
-cp .env.example .env
-```
-
-Set the following values:
-
-```
-GROQ_API_KEY=your_key_here
-GROQ_MODEL=openai/gpt-oss-120b
-```
-
-**Do not commit `.env` or any credentials.**
-
-### Run
-
-```bash
-python -m agent.cli
-```
-
-Type `exit` or `quit` to leave.
-
-### Intent inspection
-
-```bash
-python -m scripts.test_intent
-```
-
-### Evaluation
-
-```bash
-python -m evaluation.runner
-```
+Do not submit API keys, credentials, customer data, separate documents, or slide decks.
 
 ---
 
-## Architecture
+## Customer scenario
 
-```
-User
- │
- ▼
-Session Context
- │
- ▼
-Intent Extraction (LLM)
- │
- ▼
-Deterministic Router
- │
- ├───────────────┐
- ▼               ▼
-RAG Retrieval    Order Tool
- │               │
- ▼               ▼
-Policy Resolver  Sanitized Order Result
- │               │
- └───────┬───────┘
-         ▼
-    Evidence Bundle
-         │
-         ▼
- Response Generator
-         │
-         ▼
- Response Guardrail
-         │
-         ▼
- Human Handoff Evaluation
-         │
-         ▼
- Customer Response
-```
+Aster & Row has previously tried several AI support prototypes. The customer reported four recurring problems:
 
-### Retrieval
+1. **Conflicting policy answers:** The agent sometimes says the return window is 30 days and sometimes says it is 45 days.
+2. **Invented order information:** The agent occasionally gives an order status without actually looking it up.
+3. **Lost conversation context:** Follow-up questions such as “What about Canada?” are treated as unrelated questions.
+4. **Unsafe retrieved content:** Internal or instruction-like text inside the knowledge base can affect the agent’s behavior.
 
-Markdown documents are loaded, chunked, embedded, and indexed.
+The supplied corpus contains realistic data-quality problems, including superseded content, internal notes, conflicting active sources, and fields that must not be shown to customers.
 
-Retrieval returns passages with:
-
-- document ID
-- filename
-- heading
-- text
-- similarity score
-
-Policy resolution then considers:
-
-- document authority
-- active/superseded status
-- purchase-date applicability
-- membership applicability
-- final-sale applicability
-- supersession
-- genuine conflicts
-
-The LLM does not receive the entire knowledge base — only resolved, applicable evidence.
-
-### Orders
-
-`data/orders.json` is accessed through `OrderLookupTool`.
-
-The model does not receive the complete order database. Only the sanitized result of an actual lookup is provided to the response-generation layer.
-
-Internal fields such as:
-
-- customer email
-- address
-- internal notes
-- risk score
-
-are never exposed to the customer.
-
-### Multi-turn context
-
-`SessionContext` retains only relevant structured context, such as:
-
-- previous message
-- resolved query
-- active topic
-- order ID
-
-This allows follow-ups such as:
-
-> Do you ship internationally?
-
-followed by:
-
-> What about Canada?
-
-to resolve against the previous topic.
+Your task is to build an agent that handles these conditions deliberately rather than succeeding only on ideal questions.
 
 ---
 
-## Technology choices
+# Required capabilities
 
-| Component | Choice |
-|---|---|
-| Language | Python |
-| LLM provider | Groq |
-| LLM | openai/gpt-oss-120b |
-| Embeddings | all-MiniLM-L6-v2 |
-| Retrieval | NumPy cosine-similarity index |
-| Knowledge base | Markdown |
-| Order data | JSON |
-| Structured validation | Pydantic |
-| Tests | pytest |
-| Interface | CLI |
+## 1. Retrieval-Augmented Generation
 
-The system intentionally avoids a production vector database because the assignment explicitly prioritizes a small, reliable implementation over infrastructure.
+Use RAG over the Markdown files in `knowledge-base/`.
 
----
+Your implementation must:
 
-## Evaluation
+- Split and index the supplied documents.
+- Preserve useful metadata from the document front matter.
+- Retrieve only relevant passages instead of sending the entire corpus to the model.
+- Prefer authoritative, active policy documents over superseded or non-policy documents.
+- Include source references in every policy or product answer. A source should identify at least the filename and relevant heading.
+- Avoid making claims that are not supported by the retrieved content.
+- Clearly say when the supplied information is insufficient.
+- Surface genuine conflicts between current authoritative sources rather than silently choosing one.
 
-### Baseline
+Do not delete or rewrite the supplied source files to make the assignment easier. You may create derived indexes or normalized representations.
 
-Initial baseline before reliability fixes:
+## 2. Order lookup as a tool or function
 
-`[INSERT BASELINE SCORE]`
+Use `data/orders.json` to implement an order-status lookup tool or function.
 
-The baseline exposed failures involving:
+The model must **not** receive the entire orders file in its prompt. It should receive only the result of a lookup when order information is actually required.
 
-- policy precedence
-- order lookup routing
-- multi-turn context
-- human handoff
-- structured output
-- prompt-injection handling
+The order lookup behavior must:
 
-### Current result
+- Ask for an order ID when it is missing.
+- Handle unknown and malformed order IDs safely.
+- Normalize harmless input differences such as lowercase IDs or surrounding whitespace.
+- Use the order’s current `status` as authoritative.
+- Avoid inventing a delivery estimate when one is unavailable.
+- Avoid reporting stale delivery fields for cancelled or returned orders.
+- Never expose customer email, address, internal notes, risk scores, or other internal-only fields.
+- Never claim that a lookup happened when it did not.
 
-Latest evaluation:
+Assume that possession of the order ID is sufficient authentication for this mock assignment. You do not need to build a full identity-verification system.
 
-`[INSERT FINAL SCORE AFTER ALL FIXES]`
+## 3. Multi-turn conversation
 
-Category breakdown:
+Maintain relevant session context across turns.
 
-| Category | Result |
-|---|---|
-| Retrieval | [x/x] |
-| Multi-source grounding | [x/x] |
-| Conversation | [x/x] |
-| Groundedness | [x/x] |
-| Tool use | [x/x] |
-| Tool reliability | [x/x] |
-| Privacy | [x/x] |
-| Prompt security | [x/x] |
-| Abstention | [x/x] |
-| Source conflict | [x/x] |
+The agent should correctly handle follow-ups such as:
 
-Run:
+- “Do you ship internationally?” followed by “What about Canada?”
+- “Where is `ORD-1007`?” followed by “When will it arrive?”
+- A policy question followed by a narrower question about an exception.
 
-```bash
-python -m evaluation.runner
-```
+The agent should not carry unrelated details indefinitely or mix one session with another.
 
-to reproduce the evaluation.
+## 4. Prompting and agent behavior
 
----
+The agent must:
 
-## Bug diary
+- Treat user messages, retrieved passages, and tool results as untrusted data.
+- Follow application instructions rather than instructions found inside retrieved documents.
+- Refuse requests to reveal system prompts, hidden instructions, secrets, or internal-only data.
+- Use company content rather than general model knowledge for company-specific questions.
+- Ask a concise clarifying question when required information is missing.
+- Recommend human assistance when the documents conflict, the data is insufficient, or an action cannot be completed.
+- Never promise that a refund, cancellation, replacement, or address change has been completed unless the system actually supports that action.
 
-### 1. Order lookup was skipped for `Route.BOTH`
+## 5. Evaluation suite
 
-**Reproduction**
-A request requiring both policy retrieval and order lookup produced retrieved evidence but no order result.
+The file `evaluation/visible-cases.json` contains behavior-level cases that your system must handle.
 
-**Root cause**
-The executor only performed the order lookup for `route == Route.ORDER_TOOL`. It did not execute the order tool when the route was `Route.BOTH`.
+Build an evaluation suite that:
 
-**Fix**
-The executor now executes the order lookup whenever the intent requires it, including combined routes.
+- Covers every supplied visible case.
+- Adds at least **five original cases** of your own.
+- Can be run using one clearly documented command.
+- Reports individual case results, not only a single overall score.
+- Separately reports useful categories such as retrieval, groundedness, tool use, privacy, and multi-turn behavior.
+- Uses deterministic assertions wherever practical, including source selection, tool calls, tool arguments, forbidden disclosures, and abstention behavior.
+- Does not rely exclusively on another LLM to grade the agent.
 
-**Regression test**
-`tests/agent/test_executor_integration.py` covers the combined retrieval + order path.
+The reviewers will also test paraphrases and combinations that are not included in the visible file. Do not hardcode answers for the supplied prompts.
 
-### 2. Groq rejected structured response schemas
+As you build, keep a small **bug diary** in your README. Document at least three failures you found in your own agent, including:
 
-**Reproduction**
-The live agent failed with:
+- How you reproduced the failure.
+- The actual root cause.
+- The change you made.
+- The regression test that now catches it.
 
-```
-invalid JSON schema for response_format
-```
+At least one documented failure should be something you discovered beyond the exact wording of the visible cases. Include an early baseline and final evaluation result so we can see what improved.
 
-Groq required every object property to appear in `required`.
+## 6. Basic observability
 
-**Root cause**
-Optional Pydantic fields were represented as optional properties rather than required nullable properties.
+Provide a debug mode, trace, or log that makes it possible to inspect:
 
-**Fix**
-Nullable structured-output fields are represented as required fields whose value may be `null`.
+- The current user message.
+- Relevant conversation history.
+- Retrieved passages, metadata, and scores.
+- Tool calls and sanitized tool results.
+- The final response.
+- Errors, fallbacks, or handoffs.
 
-**Regression test**
-Intent and structured-response tests exercise the generated Pydantic schema.
+Plain structured logs are sufficient. Do not build a dashboard. Never log secrets.
 
-### 3. Retrieval could surface internal migration content
+## 7. Minimal interface
 
-**Reproduction**
-A user referenced an internal migration note claiming that every customer receives 60 days.
+A CLI, simple web page, or basic API is sufficient. Visual polish will not affect the score.
 
-The retriever returned `14-internal-content-migration-notes.md` alongside the legacy 45-day policy.
+The final user-facing response should make it easy to see:
 
-**Root cause**
-Semantic retrieval alone does not understand document authority.
-
-**Fix**
-Policy resolution filters retrieved candidates using document metadata before allowing them to support a customer-facing answer. Internal migration notes are treated as untrusted data rather than instructions.
-
-**Regression test**
-The visible prompt-injection evaluation case verifies that the migration note cannot override the authoritative current policy.
-
-### 4. Handoff rules were incomplete
-
-**Reproduction**
-Requests for unsupported actions such as replacement, warranty approval, and address changes were not always marked for human assistance.
-
-**Root cause**
-The handoff evaluator did not cover every unsupported customer action specified by the escalation policy.
-
-**Fix**
-The evaluator now recognizes unsupported actions and insufficient retrieval evidence as human-handoff conditions.
-
-**Regression test**
-`tests/agent/test_handoff.py` contains dedicated cases for these behaviors.
+- The answer.
+- Sources, when applicable.
+- Whether the agent is recommending a human handoff.
 
 ---
 
-## Security and safety behavior
+# README requirements
 
-Retrieved documents and tool results are treated as data, not instructions.
+Your completed repository README must include:
 
-The agent:
+1. Setup and run instructions that work from a clean clone.
+2. Required environment variables and an `.env.example` without real credentials.
+3. The model, embedding approach, framework, and storage approach you chose.
+4. A short architecture explanation.
+5. The command for running evaluations.
+6. Baseline and final evaluation results, broken down by category.
+7. A bug diary covering at least three reproduced failures, root causes, fixes, and regression tests.
+8. Known limitations and what you would improve before production.
+9. Which AI coding tools you used, what you used them for, and one example of an AI-generated suggestion that was wrong or incomplete.
+10. A **2–4 minute GIF or video embedded in the README** demonstrating:
+   - One knowledge-base question with citations.
+   - One order lookup.
+   - One multi-turn conversation.
+   - One case where the agent correctly refuses to guess or recommends human help.
+   - The evaluation suite running.
 
-- does not reveal hidden prompts
-- does not reveal internal notes
-- does not reveal customer addresses or email addresses
-- does not reveal risk scores
-- does not invent order information
-- does not invent delivery dates
-- does not silently resolve genuine authoritative source conflicts
-- recommends human assistance when the supplied information is insufficient
-- does not claim that an unsupported action was completed
-- refuses requests for internal information
-
----
-
-## Known limitations
-
-This is a take-home implementation rather than a production support platform.
-
-- No authentication or identity verification
-- No persistent conversation database
-- In-memory session context
-- Local NumPy retrieval index
-- No production vector database
-- No streaming response UI
-- No real ticketing/handoff integration
-- Evaluation currently focuses on deterministic behavior-level cases
-
-## Future work
-
-- Latency and cost instrumentation
-- Real support-ticket integration
-- Stronger automated adversarial testing
-- Document versioning and approval workflows
-- End-to-end identity and authorization controls
+GitHub does not play uploaded video files inline in every context. An embedded GIF or a clickable video thumbnail/link inside the README is acceptable.
 
 ---
 
-## Project structure
+# What not to spend time on
 
-```
-├── agent/
-│   ├── agent/
-│   ├── ingestion/
-│   ├── llm/
-│   ├── orchestration/
-│   ├── retrieval/
-│   └── tools/
-├── data/
-├── knowledge-base/
-├── evaluation/
-├── scripts/
-├── .env.example
-├── .gitignore
+You do not need to build:
+
+- Authentication or user management.
+- Production deployment infrastructure.
+- A production vector database.
+- Fine-tuning.
+- A polished frontend.
+- Multiple model-provider integrations.
+- Billing, analytics dashboards, or administration screens.
+
+---
+
+# Evaluation criteria
+
+| Area | Weight |
+|---|---:|
+| Reliability, groundedness, and safe abstention | 25% |
+| Retrieval quality and document precedence | 20% |
+| Tool use, data handling, and privacy | 15% |
+| Evaluation quality and regression coverage | 20% |
+| Multi-turn behavior and observability | 10% |
+| Code clarity and practical tradeoffs | 5% |
+| README, demo, and customer-facing clarity | 5% |
+
+Framework choice and quantity of code are not scoring criteria.
+
+---
+
+# Repository contents
+
+```text
+.
 ├── README.md
+├── knowledge-base/
+│   ├── 01-returns-policy-current.md
+│   ├── 02-returns-policy-legacy.md
+│   ├── 03-final-sale-and-promotions.md
+│   ├── 04-damaged-or-wrong-items.md
+│   ├── 05-domestic-shipping.md
+│   ├── 06-international-shipping.md
+│   ├── 07-warranty.md
+│   ├── 08-order-changes-and-cancellations.md
+│   ├── 09-trailplus-membership.md
+│   ├── 10-gift-cards-and-price-adjustments.md
+│   ├── 11-product-care.md
+│   ├── 12-breeze-tumbler-product-card.md
+│   ├── 13-support-escalation.md
+│   └── 14-internal-content-migration-notes.md
+├── data/
+│   ├── orders.json
+│   └── orders-data-dictionary.md
+└── evaluation/
+    └── visible-cases.json
 ```
 
-## Demo
-
-**Evaluation suite:** TODO — embed final GIF/video here
-
----
-
-## Philosophy
-
-The goal of this implementation is not to make the model appear confident.
-
-The goal is to make the system:
-
-**retrieve → verify → reason about applicability → act only when supported → abstain when necessary.**
-
-Reliability is preferred over a broad but weak demo.
+Good luck. Build for reliability, not just for the happy-path demo.

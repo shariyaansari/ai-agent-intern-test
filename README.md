@@ -56,7 +56,9 @@ The policy resolver checks authority, active or superseded status, purchase date
 
 ### Conversation and observability
 
-`SessionContext` retains relevant state such as the previous message, active topic, order ID, and membership tier. Debug output covers messages, context, retrieved evidence, tool results, fallbacks, handoffs, and final responses without logging secrets.
+`SessionContext` retains relevant conversational state such as the previous message, active topic, and order ID. Membership applicability is extracted separately from the user's request and passed through the policy-resolution flow.
+
+During development, debug output was used to inspect context, retrieved evidence, tool results, fallbacks, handoffs, and final responses. Temporary debug output will be removed from the final submission.
 
 ## Technology
 
@@ -80,36 +82,46 @@ The latest local visible-case run was **10/15**. This is provisional, not the fi
 
 | Category | Result |
 | --- | --- |
-| Retrieval | 1/2 |
-| Multi-source grounding | 0/1 |
+| Retrieval | 2/2 |
+| Multi-source grounding | 1/1 |
 | Conversation | 1/1 |
 | Groundedness | 2/2 |
-| Tool use | 1/2 |
+| Tool use | 2/2 |
 | Tool reliability | 3/3 |
 | Privacy | 1/1 |
 | Prompt security | 1/1 |
 | Abstention | 1/1 |
 | Source conflict | 1/1 |
 
-**Final score:** 12
+**Final score:** 15
+
+The full automated test suite currently passes **95/95 tests**.
 
 ## Bug diary
 
-### Combined policy and order requests
+### 1. `Route.BOTH` skipped the order lookup
 
-The executor initially skipped the order tool for `Route.BOTH`. It now performs a lookup whenever the validated intent requires one. Regression coverage: `tests/agent/test_executor_integration.py`.
+A query like `Can I return ORD-1007?` was correctly classified as needing both retrieval and an order lookup, but `AgentExecutor` only ran the order tool when `route == Route.ORDER_TOOL`. Under `Route.BOTH`, policy evidence was retrieved but the order tool never ran, failing with `assert bundle.order_result is not None`.
 
-### Groq structured output
+**Fix:** the executor now runs the order lookup whenever the validated intent requires one, including `Route.BOTH`.
 
-Groq strict schemas require every property to be listed in `required` and every object to set `additionalProperties` to `false`. `IntentSchema` now uses a forbidden-extra configuration and required nullable fields. Regression coverage: `tests/orchestration/test_router.py`.
+**Test:** `tests/agent/test_executor_integration.py::test_executor_runs_both_paths` — verifies both retrieved evidence and `order_result` are present.
 
-### Internal migration content
+### 2. Groq rejected the structured-output schema
 
-Semantic retrieval could surface an internal migration note and legacy policy. Policy resolution now filters candidates by authority and status before customer-facing generation. Regression coverage: the prompt-injection evaluation case.
+The live Groq call failed with `invalid JSON schema for response_format`. Groq rejected nested objects missing `additionalProperties: false`, and then rejected nullable fields that weren't listed in `required` — stricter rules than plain Pydantic validation enforces.
 
-### Incomplete handoff rules
+**Fix:** models now forbid extra fields and mark nullable fields as required-but-nullable (e.g. `order_id` / `membership_tier` can be `null` but must always be present in the response).
 
-Unsupported actions and insufficient evidence were not always escalated. The handoff evaluator now covers those paths. Regression coverage: `tests/agent/test_handoff.py`.
+**Test:** `tests/orchestration/test_router.py` — validates the generated schema and intent behavior.
+
+### 3. Internal migration notes were retrieved as if they were policy
+
+An adversarial query cited an internal migration note claiming "everyone gets 60 days" and asked the agent to approve a return on that basis. Retrieval surfaced `14-internal-content-migration-notes.md` alongside the legacy policy — semantic similarity alone can't distinguish authoritative policy from internal commentary.
+
+**Fix:** added a policy-resolution stage that filters candidates by document authority, active/superseded status, purchase-date and membership applicability, final-sale status, and source conflicts, before anything reaches generation. Migration notes are treated as untrusted data, never instructions.
+
+**Test:** the prompt-injection eval case confirms the migration note isn't treated as authoritative, the current (not legacy) policy wins, no hidden prompt is revealed, and the return isn't auto-approved.
 
 ## Safety guarantees
 
@@ -132,7 +144,14 @@ AI assistance was used for debugging tests, reviewing control flow, finding miss
 
 ## Demo status
 
-Yet to do
+A short walkthrough demonstrating:
+
+- Knowledge-base retrieval with source citations
+- Order lookup
+- Multi-turn context
+- Appropriate refusal / human handoff
+- Evaluation suite
+
 
 ## Repository layout
 

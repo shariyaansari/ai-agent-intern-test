@@ -28,7 +28,6 @@ CUSTOMER_SAFE_FIELDS = {
     "carrier",
     "tracking_number",
     "estimated_delivery",
-    "customer_safe_message",
 }
 
 class OrderStatus(str, Enum):
